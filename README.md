@@ -1,2 +1,2 @@
 # mpdw2
-Praktikum 1
+Praktikum MPDW 2025
