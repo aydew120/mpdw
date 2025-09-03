@@ -1,1 +1,144 @@
+---
+title: "Tugas Kuliah 2 - Penanganan Autokorelasi"
+author: "Gusti Ayu Dewi Astinasari"
+date: "2025-09-02"
+output: html_document
+---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+# Memuat pustaka yang dibutuhkan
+library(lmtest) # Untuk Uji Durbin-Watson
+library(orcutt) # Untuk metode Cochrane-Orcutt
+library(HoRM)   # Untuk metode Hildreth-Lu
+library(readxl)
+```
+
+
+```{r}
+data_path <- "C:/Users/62851/Documents/data diy ipm.xlsx"
+ipm_diy <- read_excel(data_path)
+
+print(ipm_diy)
+```
+
+## Pembuatan Model Awal
+```{r}
+model_awal <- lm(ipm ~ tahun, data = ipm_diy)
+summary(model_awal)
+```
+
+```{r}
+sisaan_awal <- residuals(model_awal)
+plot(ipm_diy$tahun, sisaan_awal, type="o", pch=20, col="red",
+     main="Plot Sisaan vs Waktu", xlab="Tahun", ylab="Sisaan")
+abline(h=0, lty=2) # Garis referensi di y=0
+```
+
+## Uji Durbin-Watson
+```{r}
+dwtest(model_awal)
+```
+
+Hasil uji menunjukkan adanya autokorelasi positif.
+
+## Metode Cochrane Orcutt
+```{r}
+model_co <- cochrane.orcutt(model_awal)
+summary(model_co)
+
+# rho paling optimum
+rho <- model_co$rho
+cat("Rho optimum:", rho)
+```
+Diperoleh Rho optimum yaitu 0.4109169
+
+```{r}
+ipm.trans <- ipm_diy$ipm[-1] - ipm_diy$ipm[-10]*rho
+
+tahun.trans <- ipm_diy$tahun[-1] - ipm_diy$tahun[-10]*rho
+model_co_manual <- lm(ipm.trans~tahun.trans)
+
+b0_co_manual <- coef(model_co_manual)[1]/(1-rho)
+b1_co_manual <- coef(model_co_manual)[2]
+cat("Koefisien manual Cochrane-Orcutt:\n")
+cat("b0:", b0_co_manual, "\n")
+cat("b1:", b1_co_manual, "\n")
+```
+
+## Metode Hildreth Lu
+```{r}
+hildreth.lu.func<- function(r, model){
+  x <- model.matrix(model)[,-1]
+  y <- model.response(model.frame(model))
+  n <- length(y)
+  t <- 2:n
+  y <- y[t]-r*y[t-1]
+  x <- x[t]-r*x[t-1]
+  
+  return(lm(y~x))
+}
+
+#Pencariab rho yang meminimumkan SSE
+r <- c(seq(0.1,0.9, by= 0.1))
+tab <- data.frame("rho" = r, "SSE" = sapply(r, function(i){deviance(hildreth.lu.func(i, model_awal))}))
+round(tab, 4)
+```
+
+Diperoleh rho yg paling optimum = 0.4 dengan SSE 0.1647
+
+```{r}
+#Rho optimal di sekitar 0.4
+rOpt <- seq(0.2,0.5, by= 0.001)
+tabOpt <- data.frame("rho" = rOpt, "SSE" = sapply(rOpt, function(i){deviance(hildreth.lu.func(i, model_awal))}))
+head(tabOpt[order(tabOpt$SSE),])
+```
+
+Diperoleh rho paling optimum = 0.411
+
+```{r}
+#Grafik SSE optimum
+par(mfrow = c(1,1))
+plot(tab$SSE ~ tab$rho , type = "l", xlab = "Rho", ylab = "SSE")
+abline(v = tabOpt[tabOpt$SSE==min(tabOpt$SSE),"rho"], lty = 2, col="red",lwd=2)
+text(x=0.411, y=0.1646121, labels = "rho=0.411", cex = 0.8)
+```
+
+```{r}
+model_hl <- hildreth.lu(ipm_diy$ipm, ipm_diy$tahun, rho = 0.411)
+summary(model_hl)
+```
+
+```{r}
+#Transformasi Balik
+cat("y = ", coef(model_hl)[1]/(1-0.411), "+", coef(model_hl)[2],"x", sep = "")
+```
+
+```{r}
+#Deteksi autokorelasi
+dwtest(model_hl)
+```
+Setelah pengecekan melalui uji durbin-watson kembali diperoleh tidak adanya autokorelasi karena p-value > 0.05
+
+```{r}
+# Menghitung SSE untuk setiap model secara manual
+sse_awal <- sum(residuals(model_awal)^2)
+sse_co <- sum(residuals(model_co)^2)
+sse_hl <- sum(residuals(model_hl)^2)
+
+# Membuat tabel perbandingan
+data.frame(
+  Metode = c("Model Awal (Sakit)", "Cochrane-Orcutt (Sehat)", "Hildreth-Lu (Sehat)"),
+  SSE = c(sse_awal, sse_co, sse_hl),
+  DW_Statistic = c(dwtest(model_awal)$statistic, model_co$DW[3], dwtest(model_hl)$statistic)
+)
+```
+
+## Kesimpulan
+
+Metode Hildreth-Lu adalah yang paling baik karena:
+SSE paling kecil (1.5325571) → model paling akurat.
+DW mendekati 2 (0.1646121) → autokorelasi sudah cukup terkoreksi.
