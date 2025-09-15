@@ -267,7 +267,7 @@ GoF(model.ardl)
 
 Nilai MAPE sebesar 0.7069% \< 10%, mengindikasikan model sangat baik.
 
-#Pemodelan DLM & ARDL dengan Library `dynlm`
+# Pemodelan DLM & ARDL dengan Library `dynlm`
 
 ```{r}
 library(dynlm)
