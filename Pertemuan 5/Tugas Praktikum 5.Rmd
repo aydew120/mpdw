@@ -1,1 +1,146 @@
+---
+title: "Tugas Praktikum 5 MPDW Penanganan Data Tidak Stasioner"
+author: "Gusti Ayu Dewi Astinasari | G1401231041"
+date: "2025-10-01"
+output: html_document
+---
+
+# Impor Data
+
+```{r}
+library(rio)
+datagold <- import("C:/Users/62851/Downloads/gold2.xlsx")
+datagold
+```
+
+Mengubah data agar terbaca sebagai data deret waktu dengan fungsi `ts()` .
+
+```{r}
+datagold.ts <- ts(datagold$Price)
+```
+
+
+```{r}
+summary(datagold.ts)
+```
+
+```{r}
+library(ggplot2)
+library(tsibble)
+library(tseries)
+library(MASS)
+```
+
+## Plot Time Series
+
+```{r}
+plot_stas <- datagold.ts |> as_tsibble() |> 
+  ggplot(aes(x = index, y = value)) + geom_line() + theme_bw() +
+  xlab("Obs") + ylab("Nilai")
+plot_stas
+mean(datagold.ts)
+```
+
+Berdasarkan plot time series tersebut, terlihat bahwa data tidak stasioner dalam rataan, ditandai dengan adanya trend pada data dan tidak stasioner dalam ragam, ditandai dengan adanya perbedaan lebar pita pada plot.
+
+```{r}
+lattice::densityplot(as.vector(datagold.ts))
+```
+
+Secara visual, data ini menunjukkan distribusi bimodal yang kuat, yang merupakan sinyal bahwa asumsi normalitas tidak terpenuhi. Pola ini juga memberikan indikasi awal yang kuat bahwa data mungkin tidak stasioner karena adanya pergeseran dalam pusat data.
+
+## Plot ACF
+
+```{r}
+acf(datagold.ts)
+```
+
+Berdasarkan plot ACF, terlihat bahwa plot ACF data menurun secara perlahan (*tails of slowly*). Hal ini juga menjadi indikasi bahwa data tidak stasioner dalam rataan. Akan dilakukan konfirmasi kembali menggunakan uji formal ADF.
+
+## Uji ADF
+
+```{r}
+tseries::adf.test(datagold.ts)
+```
+$H_0$ : Data tidak stasioner dalam rataan
+
+$H_1$ : Data stasioner dalam rataan
+
+Berdasarkan uji ADF tersebut, didapat *p-value* sebesar 0.3021 ( > taraf nyata 5%) sehingga tolak $H_0$ dan menandakan bahwa data tidak stasioner dalam rataan. Hal ini sesuai dengan hasil eksplorasi menggunakan plot time series dan plot ACF. 
+
+## Plot Box-Cox
+
+```{r}
+index <- seq(1:100)
+bc_full = boxcox(datagold.ts~index, lambda = seq(-10,20,by=0.01))
+#Nilai Rounded Lambda
+lambda <- bc_full$x[which.max(bc_full$y)]
+lambda
+#SK
+bc_full$x[bc_full$y > max(bc_full$y) - 1/2 * qchisq(.95,1)]
+```
+
+Plot Boxcox menunjukkan nilai *rounded value* ($\lambda$) optimum sebesar **7,41** dan pada selang kepercayaan 95% nilai memiliki batas bawah **-1,47** dan batas atas **8,52**. Selang tersebut memuat nilai **1**, sehingga dapat dikatakan bahwa data stasioner dalam ragam.
+
+Hasil menunjukkan data stasioner dalam ragam namun tidak stasioner dalam rataan. Penanganan akan dilakukan melalui differencing.
+
+## Penanganan Ketidakstasioneran Data (d = 1)
+
+```{r}
+dt.diff<-diff(datagold.ts,differences = 1) 
+plot.ts(dt.diff, lty=1, xlab="waktu", ylab="Data Difference 1 Kurs", main="Plot Difference Kurs")
+```
+
+#### Plot Box Cox setelah Penanganan d = 1
+
+```{r}
+index <- seq(1:99)
+bc.d1 = MASS::boxcox(ts(dt.diff+800)~index, lambda = seq(-2,2,by=1))
+#Nilai Rounded Lambda
+lambda <- bc.d1$x[which.max(bc.d1$y)]
+lambda
+#SK
+bc.d1$x[bc.d1$y > max(bc.d1$y) - 1/2 * qchisq(.95,1)]
+```
+
+Data stasioner dalam ragam.
+
+#### Uji ADF setelah penanganan d = 1
+
+```{r}
+tseries::adf.test(dt.diff)
+```
+p-value = 0.366 > 0.05, tidak stasioner dalam rataan. Perlu dilakukan differencing untuk kedua kalinya.
+
+## Penanganan Ketidakstasioneran Data d = 2
+
+```{r}
+dt.diff2<-diff(datagold.ts,differences = 2) 
+plot.ts(dt.diff2, lty=1, xlab="waktu", ylab="Data Difference 2 Kurs", main="Plot Difference Kurs")
+```
+
+### Plot Box Cox setelah Penanganan d = 2
+
+```{r}
+index <- seq(1:98)
+bc.d2 = MASS::boxcox(ts(dt.diff2+1500)~index, lambda = seq(-2,2,by=1))
+#Nilai Rounded Lambda
+lambda <- bc.d2$x[which.max(bc.d2$y)]
+lambda
+#SK
+bc.d2$x[bc.d2$y > max(bc.d2$y) - 1/2 * qchisq(.95,1)]
+```
+
+Data stasioner dalam ragam.
+
+### Uji ADF setelah penanganan d = 2
+
+```{r}
+tseries::adf.test(dt.diff2)
+```
+
+p-value = 0.01 < 0.05, sehingga data sudah stasioner dalam rataan.
+
+Masalah stasioneritas telah tertangani, dengan perlu adanya differencing sebanyak 2 kali (d=2).
+
 
